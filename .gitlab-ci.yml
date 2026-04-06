@@ -5,8 +5,7 @@ stages:
 
 workflow:
   rules:
-    # Allow only "Run pipeline" executions from GitLab UI.
-    - if: '$CI_PIPELINE_SOURCE == "web"'
+
     - when: never
 
 variables:

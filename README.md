@@ -28,7 +28,6 @@ Pipeline aşamaları:
 3. **execute**
    - DB tipine göre güvenli çalıştırma (`psql` veya `sqlplus`)
 
-Pipeline yalnızca GitLab UI üzerinden **Run pipeline** ile (`CI_PIPELINE_SOURCE=web`) başlatılabilir; push/merge/api/schedule kaynakları engellenmiştir.
 
 ## 3) Dizin Yapısı (Zorunlu)
 
