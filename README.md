@@ -28,6 +28,7 @@ Pipeline aşamaları:
 3. **execute**
    - DB tipine göre güvenli çalıştırma (`psql` veya `sqlplus`)
 
+
 ## 3) Dizin Yapısı (Zorunlu)
 
 SQL scriptlerin aşağıdaki zorunlu formatta tutulması gerekir:
