@@ -1,0 +1,107 @@
+stages:
+  - validate
+  - approve
+  - execute
+
+workflow:
+  rules:
+    # Allow only "Run pipeline" executions from GitLab UI.
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - when: never
+
+variables:
+  DB_TYPE:
+    value: ""
+    description: "Database type. Allowed values: Oracle, Postgre"
+  ENVIRONMENT:
+    value: ""
+    description: "Target environment. Allowed values: Test, Prod"
+  DB_NAME:
+    value: ""
+    description: "Database logical name used in SQL path segment: <DB_NAME>"
+  SCRIPT_TYPE:
+    value: ""
+    description: "Script type. Allowed values: DDL, DML"
+  SCRIPT_NAME:
+    value: ""
+    description: "SQL file name only (example: sample_update_.sql). Do not provide path."
+
+.default_job_template:
+  tags: []
+  before_script:
+    - chmod +x scripts/*.sh
+
+validate_inputs_and_file:
+  stage: validate
+  extends: .default_job_template
+  script:
+    - ./scripts/validate_inputs.sh
+    - ./scripts/resolve_sql_file.sh > pipeline_context.env
+    - set -a; source pipeline_context.env; set +a
+    - python3 ./scripts/validate_prod_safety.py --sql-file "$RESOLVED_SQL_FILE" --environment "$ENVIRONMENT"
+    - |
+      if [[ "$DB_TYPE" == "Postgre" ]]; then
+        python3 ./scripts/validate_postgres_schema.py --sql-file "$RESOLVED_SQL_FILE"
+      fi
+  artifacts:
+    reports:
+      dotenv: pipeline_context.env
+    expire_in: 2 hours
+
+approve_prod_execution:
+  stage: approve
+  extends: .default_job_template
+  rules:
+    - if: '$ENVIRONMENT == "Prod"'
+      when: manual
+      allow_failure: false
+    - when: never
+  script:
+    - echo "Prod approval granted. Execution can continue."
+
+execute_test:
+  stage: execute
+  extends: .default_job_template
+  rules:
+    - if: '$ENVIRONMENT == "Test"'
+      when: on_success
+    - when: never
+  environment:
+    name: db-test
+  needs:
+    - job: validate_inputs_and_file
+      artifacts: true
+  script:
+    - |
+      if [[ "$DB_TYPE" == "Postgre" ]]; then
+        ./scripts/execute_postgres.sh
+      elif [[ "$DB_TYPE" == "Oracle" ]]; then
+        ./scripts/execute_oracle.sh
+      else
+        echo "ERROR: Unsupported DB_TYPE after validation: $DB_TYPE" >&2
+        exit 1
+      fi
+
+execute_prod:
+  stage: execute
+  extends: .default_job_template
+  rules:
+    - if: '$ENVIRONMENT == "Prod"'
+      when: on_success
+    - when: never
+  environment:
+    name: db-prod
+  needs:
+    - job: validate_inputs_and_file
+      artifacts: true
+    - job: approve_prod_execution
+  script:
+    - |
+      if [[ "$DB_TYPE" == "Postgre" ]]; then
+        ./scripts/execute_postgres.sh
+      elif [[ "$DB_TYPE" == "Oracle" ]]; then
+        ./scripts/execute_oracle.sh
+      else
+        echo "ERROR: Unsupported DB_TYPE after validation: $DB_TYPE" >&2
+        exit 1
+      fi
